@@ -6,7 +6,7 @@
     "type": "git",
     "url": ""
   },
-  "main": "index.js",
+  "main": "start.js",
   "scripts": {
     "start": "node start.js",
     "start-ff": "node start.js --browser firefox"
