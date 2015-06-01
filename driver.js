@@ -1,50 +1,102 @@
 var webdriverio = require('webdriverio');
+var colors = require('colors');
 var creds = require('./credentials.js');
-var options = {
-  desiredCapabilities: {
-    browserName: 'firefox'
-  }
-};
-var client = webdriverio.remote(options).init();
+var chooser = require('./chooser.js');
+var utils = require('./utils.js');
+
+// set browser
+var browser = 'phantomjs';
+if (process.argv.indexOf('--browser') != -1) {
+  browser = process.argv[process.argv.indexOf('--browser') + 1];
+}
 
 module.exports = {
 
   baseUrl: 'https://better.legendonlineservices.co.uk/enterprise/',
 
-  getSlots: function (cb) {
-    client
-      .url(this.baseUrl + 'account/Login')
+  client: false,
+
+  seleniumProcess: false,
+
+  wdOptions: {
+    desiredCapabilities: {
+      browserName: browser
+    }
+  },
+
+  connect: function (seleniumProcess) {
+    this.seleniumProcess = seleniumProcess;
+    this.client = webdriverio.remote(this.wdOptions).init();
+    this.getSlots();
+  },
+
+  getSlots: function () {
+    this.client
+      .url(this.baseUrl + 'account/Login', function () {
+        utils.log('logging in');
+      })
       .setValue('#login_Email', creds.auth.username)
       .setValue('#login_Password', creds.auth.password)
       .click('input#login')
-      .url(this.baseUrl + 'BookingsCentre/Index')
-      .click('.regionResult[onclick="showRegionClubs(9705); return false;"]')
-      .click('input[name="club"][value="246"]')
+      .url(this.baseUrl + 'BookingsCentre/Index', function () {
+        utils.log('selecting club');
+      })
+      .click('input[name="behaviours"][value="-3"]') // select activies
       .pause(1000)
-      .click('input[name="behaviours"][value="-3"]')
+      .click('.regionResult[onclick="showRegionClubs(9705); return false;"]') // expand Westminster
+      .click('input[name="club"][value="246"]') // select Queen Mother SC
       .pause(1000)
-      .click('input[name="activity"][value="444"]')
+      .click('input[name="activity"][value="444"]', function () {
+        utils.log('selecting activity');
+      }) // select Squash
+      .pause(1000) // wait for pointless animation
+      .click('input#bottomsubmit', function () {
+        utils.log('loading activity timetable');
+      }) // view timetable
       .pause(1000)
-      .click('input#bottomsubmit[value="View Timetable"]')
-      .waitFor('iframe#TB_iframeContent')
-      .frame('TB_iframeContent')
-      .getHTML('.sportsHallSlotWrapper', cb);
+      .frame('TB_iframeContent') // switch to iframe
+      .getHTML('.sportsHallSlotWrapper', function (err, html) {
+        if (err) 
+          return;
+
+        chooser.pickSlot(html);
+      });
   },
 
-  bookSlot: function (slotId) {
-    client
-      .click('#' + slotId)
-      .pause(500)
+  bookSlot: function (slotId, slotString) {
+    var driver = this;
+
+    driver.client
+      .click('#' + slotId, function () {
+        utils.log('selecting chosen slot');
+      }) // select slot
+      .waitFor('iframe#TB_iframeContent')
       .frame('TB_iframeContent')
-      .click('a[onclick="javascript:confirmCourtSelect();"]')
+      .click('a[onclick="javascript:confirmCourtSelect();"]') // add to basket
+      .pause(500)      
       .url(this.baseUrl + 'Basket/Index')
-      .click('#btnPayNow')
+      .click('#btnPayNow', function () {
+        utils.log('entering payment details');
+      }) // choose to pay now
       .setValue('#card_CardNo', creds.payment.cardNumber)
       .selectByValue('#card_ExpiryDateMonth', creds.payment.expiryMonth)
       .selectByValue('#card_ExpiryDateYear', creds.payment.expiryYear)
       .setValue('#card_SecurityCode', creds.payment.securityCode)
       .setValue('#card_CardHolder', creds.payment.cardHolder)
-      .click('#btnPayNow');
+      .click('#btnPayNow') // submit payment
+      .end(function () {
+        var msg = 'Booking complete: ' + slotString;
+
+        utils.log(msg.green);
+
+        driver.kill();
+      });
+  },
+
+  kill: function () {
+    this.client.end();
+
+    this.seleniumProcess.kill();
   }
 
 };

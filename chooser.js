@@ -1,37 +1,7 @@
-var cheerio = require('cheerio');
 var _ = require('lodash');
+var cheerio = require('cheerio');
 var inquirer = require('inquirer');
-var driver = require('./driver.js');
-
-////////////////////
-
-function setDays (chooser, $) {
-  $('.TextMembers').each(function(i, elem) {
-    var $this = $(this);
-    var $slots = $this.parent().nextUntil('div:not(.sporthallSlot)');
-    var day = $this.text();
-
-    // add day to days choices
-    chooser.days.push(day);
-
-    setSlots(chooser, day, $slots);
-  });
-}
-
-function setSlots (chooser, day, $slots) {
-  $slots.each(function(i, elem) {
-    var $this = $(this);
-    var time = $this.text().replace('Queen Mother SC', '');
-    var timeId = $this.find('.sporthallSlotAddLink').attr('id');
-
-    if (time.toLowerCase().indexOf('booked') === -1) {
-      chooser.slots[day].push({
-        time: time,
-        id: timeId
-      });
-    }
-  });
-}
+var utils = require('./utils.js');
 
 module.exports = {
 
@@ -39,53 +9,66 @@ module.exports = {
 
   slots: {},
 
-  findDesiredSlot: function (err, html) {
+  pickSlot: function (html) {
     var $ = cheerio.load(html);
 
-    setDays(this, $);
-
-    returnDay();
+    this.setDays($);
+    this.selectDay();
   },
 
-  returnDay: function () {
+  setDays: function ($) {
+    var chooser = this;
+
+    utils.log('getting available slots');
+    $('.TextMembers').each(function(i, elem) {
+      var $this = $(this);
+      var $slots = $this.parent().nextUntil('div:not(.sporthallSlot)');
+      var day = $this.text();
+
+      // add day to days choices
+      chooser.days.push(day);
+
+      // set slots
+      chooser.setSlots(day, $slots, $);
+    });
+  },
+
+  setSlots: function (day, $slots, $) {
+    var chooser = this;
+    chooser.slots[day] = [];
+
+    $slots.each(function(i, elem) {
+      var $this = $(this);
+      var time = $this.text().replace('Queen Mother SC', '');
+      var timeId = $this.find('.sporthallSlotAddLink').attr('id');
+
+      if (time.toLowerCase().indexOf('booked') === -1) {
+        chooser.slots[day].push({
+          time: time,
+          id: timeId
+        });
+      }
+    });
+  },
+
+  selectDay: function () {
+    var chooser = this;
+
     inquirer.prompt({
       type: 'list',
       name: 'day',
       message: 'What day would you like to book?',
       choices: this.days
     }, function(answers) {
-      this.returnSlot(answers.day);
-
-      // var selectedDay = slots[answers.day];
-      // var availableSlots = _.pluck(selectedDay, 'time');
-
-      // inquirer.prompt({
-      //   type: 'list',
-      //   name: 'time',
-      //   message: 'Which time slot would you like to book?',
-      //   choices: availableSlots
-      // }, function(answers) {
-      //   var slot = _.findWhere(selectedDay, {time: answers.time});
-
-      //   client
-      //     .click('#' + slot.id)
-      //     .pause(500)
-      //     .frame('TB_iframeContent')
-      //     .click('a[onclick="javascript:confirmCourtSelect();"]')
-      //     .url(baseUrl + 'Basket/Index')
-      //     .click('#btnPayNow')
-      //     .setValue('#card_CardNo', cardNumber)
-      //     .selectByValue('#card_ExpiryDateMonth', expiryMonth)
-      //     .selectByValue('#card_ExpiryDateYear', expiryYear)
-      //     .setValue('#card_SecurityCode', securityCode)
-      //     .setValue('#card_CardHolder', cardHolder)
-      //     .click('#btnPayNow');
-      // });
+      chooser.selectSlot(answers.day);
     });
   },
 
-  returnSlot: function (day) {
-    var availableSlots = _.pluck(this.slots[day], 'time');
+  selectSlot: function (day) {
+    var chooser = this;
+    var availableSlots = _.pluck(chooser.slots[day], 'time');
+
+    availableSlots = availableSlots.concat([new inquirer.Separator(), 'BACK TO DAY LIST', new inquirer.Separator()]);
 
     inquirer.prompt({
       type: 'list',
@@ -93,74 +76,35 @@ module.exports = {
       message: 'Which time slot would you like to book?',
       choices: availableSlots
     }, function(answers) {
-      var slot = _.findWhere(this.slots[day], {time: answers.time});
-      driver.bookSlot(slot.id);
+      var slot = _.findWhere(chooser.slots[day], {time: answers.time});
+
+      if (answers.time === 'BACK TO DAY LIST') {
+        chooser.selectDay();
+        return;
+      }
+
+      chooser.confirmSlot(slot.id, answers.time.substring(0, 5) + ' on ' + day);
+    });
+  },
+
+  confirmSlot: function (slotId, slotString) {
+    var chooser = this;
+    
+    inquirer.prompt({
+      type: 'confirm',
+      name: 'confirm',
+      default: false,
+      message: 'Are you sure you want to book ' + slotString + '?'
+    }, function(answers) {
+      var driver = require('./driver.js');
+
+      if (!answers.confirm) {
+        chooser.selectDay();
+        return;
+      }
+
+      driver.bookSlot(slotId, slotString);
     });
   }
 
 };
-
-
-// function displaySlots (err, html) {
-//   var $ = cheerio.load(html);
-//   var days = [];
-//   var slots = {};
-
-//   $('.TextMembers').each(function(i, elem) {
-//     var $this = $(this);
-//     var $slots = $this.parent().nextUntil('div:not(.sporthallSlot)');
-//     var day = $this.text();
-
-//     // add day to days choices
-//     days.push(day);
-
-//     // add key to slots
-//     slots[day] = [];
-
-//     // loop slots and add to available slots
-//     $slots.each(function(i, elem) {
-//       var $this = $(this);
-//       var time = $this.text().replace('Queen Mother SC', '');
-//       var timeId = $this.find('.sporthallSlotAddLink').attr('id');
-
-//       if (time.toLowerCase().indexOf('booked') === -1) {
-//         slots[day].push({
-//           time: time,
-//           id: timeId
-//         });
-//       }
-//     });
-//   });
-
-//   inquirer.prompt({
-//     type: 'list',
-//     name: 'day',
-//     message: 'What day would you like to book?',
-//     choices: days
-//   }, function(answers) {
-//     var selectedDay = slots[answers.day];
-//     var availableSlots = _.pluck(selectedDay, 'time');
-
-//     inquirer.prompt({
-//       type: 'list',
-//       name: 'time',
-//       message: 'Which time slot would you like to book?',
-//       choices: availableSlots
-//     }, function(answers) {
-//       var slot = _.findWhere(selectedDay, {time: answers.time});
-
-//       client
-//         .click('#' + slot.id)
-//         .pause(500)
-//         .frame('TB_iframeContent')
-//         .click('a[onclick="javascript:confirmCourtSelect();"]')
-//         .url(baseUrl + 'Basket/Index')
-//         .click('#btnPayNow')
-//         .setValue('#card_CardNo', cardNumber)
-//         .selectByValue('#card_ExpiryDateMonth', expiryMonth)
-//         .selectByValue('#card_ExpiryDateYear', expiryYear)
-//         .setValue('#card_SecurityCode', securityCode)
-//         .setValue('#card_CardHolder', cardHolder)
-//         .click('#btnPayNow');
-//     });
-//   });
