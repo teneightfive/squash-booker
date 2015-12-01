@@ -4,7 +4,14 @@ This app logs in to the Lambeth council gym booking site and books an activity, 
 
 It uses selenium webdriver to drive a browser through the steps and [cheerio](https://github.com/cheeriojs/cheerio) to scrape the current timetable. It then uses [Inquirer](https://github.com/SBoudrias/Inquirer.js/) to prompt some input from the user to book a slot.
 
-#### To run
+## To install
+
+Install node dependencies
+```
+npm install
+```
+
+## To run
 
 To run the app using [phantomjs](http://phantomjs.org/):
 ```
@@ -16,7 +23,7 @@ To run using firefox:
 npm run-script start-ff
 ```
 
-#### Creds
+### Environment variables
 
 You'll need the following credentials set as environment variables to login and book an activity:
 
