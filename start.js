@@ -1,6 +1,6 @@
-var driver = require('./driver.js');
 var selenium = require('selenium-standalone');
-var utils = require('./utils.js');
+var driver = require('./lib/driver.js');
+var utils = require('./lib/utils.js');
 
 selenium.install({
   version: '2.45.0',
